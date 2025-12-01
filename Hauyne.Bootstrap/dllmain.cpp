@@ -131,10 +131,10 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
     if (reason == DLL_PROCESS_ATTACH)
     {
         DisableThreadLibraryCalls(hModule);
-        CreateThread(nullptr, 0, [](LPVOID) -> DWORD {
+        CreateThread(nullptr, 0, [](LPVOID param) -> DWORD {
             load_payload();
-            return 0;
-        }, nullptr, 0, nullptr);
+            FreeLibraryAndExitThread((HMODULE)param, 0);
+        }, hModule, 0, nullptr);
     }
     return TRUE;
 }
