@@ -8,6 +8,7 @@
  * 
  */
 
+// ReSharper disable CppCStyleCast
 #include <Windows.h>
 #include <filesystem>
 #include <string>
