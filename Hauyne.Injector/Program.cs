@@ -68,6 +68,7 @@ static partial class Injector
         }
     }
 
+    #region This is all copypasted might as well not look here
     [Flags]
     enum ProcessAccess : uint
     {
@@ -124,4 +125,5 @@ static partial class Injector
     [LibraryImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static partial bool CloseHandle(nint handle);
+    #endregion
 }
