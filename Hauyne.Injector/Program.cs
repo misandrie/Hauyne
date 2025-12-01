@@ -1,0 +1,127 @@
+﻿using System.Diagnostics;
+using System.Diagnostics.Metrics;
+using System.Runtime.InteropServices;
+using System.Text;
+
+var targetProcess = args.Length > 0
+    ? Process.GetProcessesByName(args[0]).FirstOrDefault()
+    : throw new ArgumentException("Your other argument is the process name without the .exe part mkay");
+
+if (targetProcess == null)
+{
+    Console.WriteLine("Process not found");
+    return 1;
+}
+
+// Technically this is a detection vector but also I can just
+// TODO: Unload bootstrap after we are done
+var dllPath = Path.GetFullPath("Hauyne.Bootstrap.dll"); 
+if (!File.Exists(dllPath))
+{
+    Console.WriteLine($"Bootstrap not found: {dllPath}");
+    return 1;
+}
+
+Injector.Inject(targetProcess, dllPath);
+Console.WriteLine($"Injected into {targetProcess.ProcessName} ({targetProcess.Id})");
+return 0;
+
+static partial class Injector
+{
+    public static void Inject(Process process, string dllPath)
+    {
+        var pathBytes = Encoding.Unicode.GetBytes(dllPath + '\0');
+
+        var hProcess = OpenProcess(
+            ProcessAccess.CreateThread | ProcessAccess.VmOperation |
+            ProcessAccess.VmWrite | ProcessAccess.VmRead | ProcessAccess.QueryInformation,
+            false, process.Id);
+
+        if (hProcess == nint.Zero)
+            throw new InvalidOperationException($"OpenProcess failed: {Marshal.GetLastWin32Error()}");
+
+        try
+        {
+            var allocated = VirtualAllocEx(hProcess, nint.Zero, (uint)pathBytes.Length,
+                AllocationType.Commit | AllocationType.Reserve, MemoryProtection.ReadWrite);
+
+            if (allocated == nint.Zero)
+                throw new InvalidOperationException("VirtualAllocEx failed");
+
+            if (!WriteProcessMemory(hProcess, allocated, pathBytes, (uint)pathBytes.Length, out _))
+                throw new InvalidOperationException("WriteProcessMemory failed");
+
+            var kernel32 = GetModuleHandle("kernel32.dll");
+            var loadLibrary = GetProcAddress(kernel32, "LoadLibraryW");
+
+            var thread = CreateRemoteThread(hProcess, nint.Zero, 0, loadLibrary, allocated, 0, out _);
+            if (thread == nint.Zero)
+                throw new InvalidOperationException($"CreateRemoteThread failed: {Marshal.GetLastWin32Error()}");
+
+            WaitForSingleObject(thread, 5000);
+            CloseHandle(thread);
+            VirtualFreeEx(hProcess, allocated, 0, FreeType.Release);
+        }
+        finally
+        {
+            CloseHandle(hProcess);
+        }
+    }
+
+    [Flags]
+    enum ProcessAccess : uint
+    {
+        CreateThread = 0x0002,
+        VmOperation = 0x0008,
+        VmRead = 0x0010,
+        VmWrite = 0x0020,
+        QueryInformation = 0x0400
+    }
+
+    [Flags]
+    enum AllocationType : uint
+    {
+        Commit = 0x1000,
+        Reserve = 0x2000
+    }
+
+    enum MemoryProtection : uint
+    {
+        ReadWrite = 0x04
+    }
+
+    enum FreeType : uint
+    {
+        Release = 0x8000
+    }
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint OpenProcess(ProcessAccess access, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, int processId);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint VirtualAllocEx(nint hProcess, nint address, uint size, AllocationType type, MemoryProtection protect);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WriteProcessMemory(nint hProcess, nint address, byte[] buffer, uint size, out nuint written);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool VirtualFreeEx(nint hProcess, nint address, uint size, FreeType type);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    private static partial nint CreateRemoteThread(nint hProcess, nint attributes, uint stackSize, nint startAddress, nint parameter, uint flags, out uint threadId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern nint GetModuleHandle(string moduleName);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+    private static extern nint GetProcAddress(nint hModule, string procName);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial uint WaitForSingleObject(nint handle, uint milliseconds);
+
+    [LibraryImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint handle);
+}
