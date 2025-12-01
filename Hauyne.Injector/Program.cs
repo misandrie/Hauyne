@@ -23,8 +23,6 @@ if (targetProcess == null)
     return 1;
 }
 
-// Technically this is a detection vector but also I can just
-// TODO: Unload bootstrap after we are done
 var dllPath = Path.GetFullPath("Hauyne.Bootstrap.dll"); 
 if (!File.Exists(dllPath))
 {
