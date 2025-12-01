@@ -7,6 +7,12 @@
 
 using string_t = std::basic_string<char_t>;
 
+typedef int (CORECLR_DELEGATE_CALLTYPE* load_assembly_fn)(
+    const char_t* assembly_path,
+    void* load_context,
+    void* reserved
+);
+
 hostfxr_initialize_for_runtime_config_fn hostfxr_init = nullptr;
 hostfxr_get_runtime_delegate_fn hostfxr_get_delegate = nullptr;
 hostfxr_close_fn hostfxr_close = nullptr;
@@ -46,26 +52,6 @@ bool load_hostfxr()
     return hostfxr_init && hostfxr_get_delegate && hostfxr_close;
 }
 
-load_assembly_and_get_function_pointer_fn get_load_assembly_fn(const char_t* config_path)
-{
-    hostfxr_handle ctx = nullptr;
-
-    int rc = hostfxr_init(config_path, nullptr, &ctx);
-
-    // ALARM WE ARE WITHOUT A CONFIG
-    if (rc == 0x80008093 || ctx == nullptr)
-        rc = hostfxr_init(nullptr, nullptr, &ctx);
-
-    if (!ctx)
-        return nullptr;
-
-    load_assembly_and_get_function_pointer_fn load_assembly = nullptr;
-    hostfxr_get_delegate(ctx, hdt_load_assembly_and_get_function_pointer, (void**)&load_assembly);
-
-    hostfxr_close(ctx);
-    return load_assembly;
-}
-
 void load_payload()
 {
     if (!load_hostfxr())
@@ -79,24 +65,55 @@ void load_payload()
     string_t config = (base / L"Hauyne.Payload.runtimeconfig.json").wstring();
     string_t assembly = (base / L"Hauyne.Payload.dll").wstring();
 
-    auto load_assembly = get_load_assembly_fn(config.c_str());
-    if (!load_assembly)
+    hostfxr_handle ctx = nullptr;
+    int rc = hostfxr_init(config.c_str(), nullptr, &ctx);
+
+    // ALARM WE ARE WITHOUT A CONFIG
+    if (rc == 0x80008093 || ctx == nullptr)
+        rc = hostfxr_init(nullptr, nullptr, &ctx);
+
+    if (!ctx)
         return;
+    
+    load_assembly_fn load_asm = nullptr;
+    rc = hostfxr_get_delegate(ctx, hdt_load_assembly, (void**)&load_asm);
+    if (rc != 0 || !load_asm)
+    {
+        hostfxr_close(ctx);
+        return;
+    }
+
+    rc = load_asm(assembly.c_str(), nullptr, nullptr);
+    if (rc != 0)
+    {
+        hostfxr_close(ctx);
+        return;
+    }
+    
+    get_function_pointer_fn get_fn = nullptr;
+    rc = hostfxr_get_delegate(ctx, hdt_get_function_pointer, (void**)&get_fn);
+    if (rc != 0 || !get_fn)
+    {
+        hostfxr_close(ctx);
+        return;
+    }
 
     typedef void (CORECLR_DELEGATE_CALLTYPE* entry_point_fn)();
     entry_point_fn entry = nullptr;
 
-    int rc = load_assembly(
-        assembly.c_str(),
+    rc = get_fn(
         L"Hauyne.Payload.Entrypoint, Hauyne.Payload",
         L"Initialize",
         UNMANAGEDCALLERSONLY_METHOD,
+        nullptr,
         nullptr,
         (void**)&entry
     );
 
     if (rc == 0 && entry)
         entry();
+
+    hostfxr_close(ctx);
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
