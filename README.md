@@ -1,6 +1,6 @@
 # Hauyne
 
-A managed (lie) .NET injector for managed .NET processes (truth).
+A managed (lie) .NET injector injecting .NET managed (truth) DLL's for managed .NET processes (truth).
 
 Targets running .NET 5+ processes via hostfxr, injects into the default AssemblyLoadContext.
 
