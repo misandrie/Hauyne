@@ -64,13 +64,21 @@ void load_payload()
     if (!load_hostfxr())
         return;
 
+#ifdef _WIN32
     wchar_t module_path[MAX_PATH];
     // TODO: make this an argument
     GetModuleFileNameW(GetModuleHandleW(L"Hauyne.Bootstrap.dll"), module_path, MAX_PATH);
-
     std::filesystem::path base = std::filesystem::path(module_path).parent_path();
     string_t config = (base / L"Hauyne.Payload.runtimeconfig.json").wstring();
     string_t assembly = (base / L"Hauyne.Payload.dll").wstring();
+#else
+    Dl_info info;
+    if (!dladdr((void*)load_payload, &info))
+        return;
+    std::filesystem::path base = std::filesystem::path(info.dli_fname).parent_path();
+    string_t config = (base / "Hauyne.Payload.runtimeconfig.json").string();
+    string_t assembly = (base / "Hauyne.Payload.dll").string();
+#endif
 
     hostfxr_handle ctx = nullptr;
     int rc = hostfxr_init(config.c_str(), nullptr, &ctx);
@@ -81,7 +89,7 @@ void load_payload()
 
     if (!ctx)
         return;
-    
+
     load_assembly_fn load_asm = nullptr;
     rc = hostfxr_get_delegate(ctx, hdt_load_assembly, (void**)&load_asm);
     if (rc != 0 || !load_asm)
@@ -96,7 +104,7 @@ void load_payload()
         hostfxr_close(ctx);
         return;
     }
-    
+
     get_function_pointer_fn get_fn = nullptr;
     rc = hostfxr_get_delegate(ctx, hdt_get_function_pointer, (void**)&get_fn);
     if (rc != 0 || !get_fn)
@@ -108,6 +116,7 @@ void load_payload()
     typedef void (CORECLR_DELEGATE_CALLTYPE* entry_point_fn)();
     entry_point_fn entry = nullptr;
 
+#ifdef _WIN32
     rc = get_fn(
         L"Hauyne.Payload.Entrypoint, Hauyne.Payload",
         L"Initialize",
@@ -116,6 +125,16 @@ void load_payload()
         nullptr,
         (void**)&entry
     );
+#else
+    rc = get_fn(
+        "Hauyne.Payload.Entrypoint, Hauyne.Payload",
+        "Initialize",
+        UNMANAGEDCALLERSONLY_METHOD,
+        nullptr,
+        nullptr,
+        (void**)&entry
+    );
+#endif
 
     if (rc == 0 && entry)
         entry();
