@@ -23,14 +23,21 @@ if (targetProcess == null)
     return 1;
 }
 
-var dllPath = Path.GetFullPath("Hauyne.Bootstrap.dll"); 
-if (!File.Exists(dllPath))
+var bootstrapName = OperatingSystem.IsWindows() ? "Hauyne.Bootstrap.dll" : "libHauyne.Bootstrap.so";
+var bootstrapPath = Path.GetFullPath(bootstrapName);
+if (!File.Exists(bootstrapPath))
 {
-    Console.WriteLine($"Bootstrap not found: {dllPath}");
+    Console.WriteLine($"Bootstrap not found: {bootstrapPath}");
     return 1;
 }
 
-Injector.Inject(targetProcess, dllPath);
+if (OperatingSystem.IsWindows())
+    Injector.Inject(targetProcess, bootstrapPath);
+else if (OperatingSystem.IsLinux())
+    LinuxInjector.Inject(targetProcess, bootstrapPath);
+else
+    throw new PlatformNotSupportedException();
+
 Console.WriteLine($"Injected into {targetProcess.ProcessName} ({targetProcess.Id})");
 return 0;
 
