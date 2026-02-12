@@ -9,7 +9,13 @@
  */
 
 // ReSharper disable CppCStyleCast
+#ifdef _WIN32
 #include <Windows.h>
+#else
+#include <dlfcn.h>
+#include <pthread.h>
+#endif
+
 #include <filesystem>
 #include <string>
 
@@ -105,6 +111,7 @@ void load_payload()
     hostfxr_close(ctx);
 }
 
+#ifdef _WIN32
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
 {
     if (reason == DLL_PROCESS_ATTACH)
@@ -117,3 +124,15 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved)
     }
     return TRUE;
 }
+#else
+__attribute__((constructor))
+static void on_load()
+{
+    pthread_t thread;
+    pthread_create(&thread, nullptr, [](void*) -> void* {
+        load_payload();
+        return nullptr;
+    }, nullptr);
+    pthread_detach(thread);
+}
+#endif
