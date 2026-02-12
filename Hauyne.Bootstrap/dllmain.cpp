@@ -28,31 +28,9 @@ hostfxr_initialize_for_runtime_config_fn hostfxr_init = nullptr;
 hostfxr_get_runtime_delegate_fn hostfxr_get_delegate = nullptr;
 hostfxr_close_fn hostfxr_close = nullptr;
 
-std::wstring find_hostfxr_path()
-{
-    const wchar_t* base = L"C:\\Program Files\\dotnet\\host\\fxr";
-
-    WIN32_FIND_DATAW findData;
-    HANDLE hFind = FindFirstFileW((std::wstring(base) + L"\\*").c_str(), &findData);
-
-    std::wstring latestVersion;
-    if (hFind != INVALID_HANDLE_VALUE)
-    {
-        do
-        {
-            if ((findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && findData.cFileName[0] != '.')
-                latestVersion = findData.cFileName;
-        } while (FindNextFileW(hFind, &findData));
-        FindClose(hFind);
-    }
-
-    return std::wstring(base) + L"\\" + latestVersion + L"\\hostfxr.dll";
-}
-
 bool load_hostfxr()
 {
-    std::wstring path = find_hostfxr_path();
-    HMODULE lib = LoadLibraryW(path.c_str());
+    HMODULE lib = GetModuleHandleW(L"hostfxr.dll");
     if (!lib)
         return false;
 
