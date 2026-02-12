@@ -36,6 +36,7 @@ hostfxr_close_fn hostfxr_close = nullptr;
 
 bool load_hostfxr()
 {
+#ifdef _WIN32
     HMODULE lib = GetModuleHandleW(L"hostfxr.dll");
     if (!lib)
         return false;
@@ -43,6 +44,17 @@ bool load_hostfxr()
     hostfxr_init = (hostfxr_initialize_for_runtime_config_fn)GetProcAddress(lib, "hostfxr_initialize_for_runtime_config");
     hostfxr_get_delegate = (hostfxr_get_runtime_delegate_fn)GetProcAddress(lib, "hostfxr_get_runtime_delegate");
     hostfxr_close = (hostfxr_close_fn)GetProcAddress(lib, "hostfxr_close");
+#else
+    void* lib = dlopen("libhostfxr.so", RTLD_NOLOAD | RTLD_LAZY);
+    if (!lib)
+        return false;
+
+    hostfxr_init = (hostfxr_initialize_for_runtime_config_fn)dlsym(lib, "hostfxr_initialize_for_runtime_config");
+    hostfxr_get_delegate = (hostfxr_get_runtime_delegate_fn)dlsym(lib, "hostfxr_get_runtime_delegate");
+    hostfxr_close = (hostfxr_close_fn)dlsym(lib, "hostfxr_close");
+
+    dlclose(lib);
+#endif
 
     return hostfxr_init && hostfxr_get_delegate && hostfxr_close;
 }
