@@ -17,11 +17,12 @@ public static class Entrypoint
     [UnmanagedCallersOnly]
     public static void Initialize()
     {
-        new Thread(Run) { IsBackground = true }.Start();
+        Run();
     }
 
     static void Run()
     {
-        File.WriteAllText(@"C:\temp\Hauyne.txt", $"Payload loaded at {DateTime.Now}");
+        var path = Path.Combine(Path.GetTempPath(), "Hauyne.txt");
+        File.WriteAllText(path, $"Payload loaded at {DateTime.Now}");
     }
 }
