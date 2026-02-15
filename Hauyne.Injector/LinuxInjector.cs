@@ -66,7 +66,7 @@ static partial class LinuxInjector
             regs.rip = (ulong)dlopenAddr;
             regs.rdi = (ulong)pathAddr;
             regs.rsi = RTLD_NOW;
-            regs.rsp = ((ulong)pathAddr - 8) & ~0xFUL;
+            regs.rsp = ((ulong)pathAddr - 16) & ~0xFUL + 8;
 
             ptrace(PTRACE_POKEDATA, pid, (nint)regs.rsp, (nint)oldRegs.rip);
 
